@@ -315,12 +315,46 @@ def _build_illumination_guidance(source, mask, alpha_factor, beta):
     return guidance
 
 
+from concurrent.futures import ThreadPoolExecutor
+
+def _solve_channel(c, A, source, destination, mask, offset, guidance_fn,
+                   y_idx, x_idx, y_d, x_d, mask_ids):
+    """
+    Solves the Poisson equation for a single color channel.
+    Extracted for parallel execution.
+    """
+    print(f"  Starting Channel {c}…")
+    s_c = source[:, :, c].astype(np.float64)
+    d_c = destination[:, :, c].astype(np.float64)
+    N = len(y_idx)
+
+    # 1. Build guidance field v
+    vpq_grid = guidance_fn(c, y_idx, x_idx, y_d, x_d, mask_ids)
+
+    # 2. Build RHS vector b
+    b = np.zeros(N)
+    _accumulate_rhs(b, c, y_idx, x_idx, y_d, x_d,
+                    mask_ids, s_c, d_c,
+                    source.shape, destination.shape,
+                    vpq_grid)
+
+    # 3. Solve Ax = b
+    if N < 100_000:
+        x_sol = spsolve(A, b)
+    else:
+        x_sol, info = cg(A, b, rtol=1e-6, maxiter=3 * N)
+        if info != 0:
+            print(f"\n  Warning: Channel {c} CG {'did not converge' if info > 0 else 'broke down'} "
+                  f"(info={info}).")
+
+    print(f"  Channel {c} done.")
+    return c, x_sol
+
+
 def _solve(source, destination, mask, offset, guidance_fn):
     """
-    Core solve: build A, assemble b per channel, solve A x = b.
+    Core solve: build A once, then solve R, G, B channels in parallel.
     """
-    y_off, x_off = offset
-
     y_idx, x_idx, y_d, x_d, mask_ids = _prepare_mask(
         mask, source.shape, destination.shape, offset
     )
@@ -328,34 +362,22 @@ def _solve(source, destination, mask, offset, guidance_fn):
     if N == 0:
         return destination.copy()
 
+    # Build the Laplacian matrix (shared across all channels)
     A = _build_laplacian(y_idx, x_idx, mask_ids, source.shape)
     result = destination.copy().astype(np.float64)
 
-    for c in range(3):
-        print(f"  Channel {c}…", end=" ", flush=True)
-        d_c = destination[:, :, c].astype(np.float64)
+    # Parallelize the 3 color channels
+    # ThreadPoolExecutor is effective here because SciPy solvers release the GIL.
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = []
+        for c in range(3):
+            futures.append(executor.submit(
+                _solve_channel, c, A, source, destination, mask, offset, 
+                guidance_fn, y_idx, x_idx, y_d, x_d, mask_ids
+            ))
 
-        vpq_grid = guidance_fn(c, y_idx, x_idx, y_d, x_d, mask_ids)
-
-        b = np.zeros(N)
-        _accumulate_rhs(b, c, y_idx, x_idx, y_d, x_d,
-                        mask_ids,
-                        source[:, :, c].astype(np.float64), d_c,
-                        source.shape, destination.shape,
-                        vpq_grid)
-
-        # Direct solver for moderate sizes; iterative for large masks.
-        # spsolve is more robust than CG for typical use; CG avoids the
-        # memory cost of factorisation for very large regions.
-        if N < 100_000:
-            x_sol = spsolve(A, b)
-        else:
-            x_sol, info = cg(A, b, rtol=1e-6, maxiter=3 * N)
-            if info != 0:
-                print(f"\n  Warning: CG {'did not converge' if info > 0 else 'broke down'} "
-                      f"(info={info}).")
-
-        result[y_d, x_d, c] = x_sol
-        print("done")
+        for future in futures:
+            c, x_sol = future.result()
+            result[y_d, x_d, c] = x_sol
 
     return np.clip(result, 0, 255).astype(np.uint8)

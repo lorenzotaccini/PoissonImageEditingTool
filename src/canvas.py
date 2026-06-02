@@ -6,20 +6,29 @@ from PySide6.QtGui import QPixmap, QImage, QPolygonF, QPen, QColor, QBrush, QTra
 def ndarray_to_qpixmap(arr):
     h, w, c = arr.shape
     bytes_per_line = c * w
-    qimg = QImage(arr.data, w, h, bytes_per_line, QImage.Format_RGB888)
+    qimg = QImage(arr.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
     return QPixmap.fromImage(qimg)
 
 class SourceSelectionCanvas(QGraphicsView):
-    selectionFinished = Signal(object) # Emit polygon coordinates
+    selectionFinished = Signal(object) 
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scene = QGraphicsScene(self)
         self.setScene(self.scene)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.points = []
         self.polygon_item = None
         self.pixmap_item = None
+
+    def zoom_view(self, factor):
+        self.scale(factor, factor)
+
+    def reset_zoom(self):
+        self.resetTransform()
 
     def set_image(self, img_array):
         self.points = []
@@ -31,7 +40,7 @@ class SourceSelectionCanvas(QGraphicsView):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            pos = self.mapToScene(event.pos())
+            pos = self.mapToScene(event.position().toPoint())
             self.points.append(pos)
             self.update_polygon()
         super().mousePressEvent(event)
@@ -73,20 +82,29 @@ class MainCanvas(QGraphicsView):
         self.setScene(self.scene)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.bg_item = None
         self.layer = None
 
+    def zoom_view(self, factor):
+        self.scale(factor, factor)
+
+    def reset_zoom(self):
+        self.resetTransform()
+
     def wheelEvent(self, event):
+        # Only scale the LAYER if it's selected
         if self.layer and self.layer.isSelected():
             delta = event.angleDelta().y()
             current_scale = self.layer.scale()
-            # Adjust scale by 5% per wheel notch
             factor = 1.05 if delta > 0 else 0.95
             new_scale = max(0.1, min(3.0, current_scale * factor))
             self.set_layer_scale(new_scale)
             self.scaleChanged.emit(new_scale)
             event.accept()
         else:
+            # Otherwise, use standard scroll behavior
             super().wheelEvent(event)
 
     def set_background(self, img_array):

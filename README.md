@@ -1,41 +1,60 @@
-# Poisson Image Editing Tool
+# Poisson Image Editing Pro
 
-This tool implements the techniques described in the paper "Poisson Image Editing" by Pérez et al. (2003). It allows for seamless cloning, mixed gradients, and other gradient-domain image manipulations.
+A desktop application for gradient-domain image editing, based on the research paper **"Poisson Image Editing"** (Pérez et al., SIGGRAPH 2003).
+
+This tool provides an interface for seamless cloning and local image modifications without the need for OpenCV, utilizing optimized mathematical solvers for high-quality results.
+
+## Key Features
+
+### 1. Seamless Cloning (Section 3)
+*   **Seamless Cloning:** Paste objects from one image to another with perfect color and lighting integration.
+*   **Mixed Gradients:** Combine source and destination textures. Ideal for transparent objects or preserving background patterns (e.g., skin pores, fabric).
+
+### 2. Selection Editing (Section 4)
+*   **Texture Flattening:** "Iron out" internal textures while keeping sharp outlines. Perfect for artistic effects or smoothing surfaces.
+*   **Local Illumination Change:** Correct exposure, bring out shadow details, or compress specular highlights (glare) seamlessly.
+*   **Color Change (Tinting):** Redefined as independent RGB gradient scaling. Change the color of objects while preserving all original shading, highlights, and 3D volume.
+
+### 3. Interactive UI
+*   **All-in-One Workspace:** A modern PySide6 interface that manages the entire workflow.
+*   **Interactive Transform:** Drag selections with the mouse and scale them (0.1x to 3.0x) using a slider or the **mouse wheel**.
+*   **In-Place Editing:** A dedicated mode to select a region directly on your destination image and apply Section 4 modifications immediately.
+*   **Multi-Cloning:** Support for consecutive edits. Process one object, and immediately load another to build complex compositions.
+*   **Workflow Memory:** Remembers your last used directory for faster file selection.
 
 ## Requirements
 - Python 3.9+
-- NumPy
-- SciPy
-- Pillow
-- Scikit-Image
+- NumPy & SciPy
+- Pillow & Scikit-Image
+- PySide6 (Qt6)
 
 ## Installation
 ```bash
-pip install numpy scipy pillow scikit-image
+pip install numpy scipy pillow scikit-image PySide6
 ```
 
 ## Usage
-### Advanced Interactive UI (Recommended)
-Launch the professional all-in-one editor:
+
+### Launching the Application
 ```bash
 python src/main.py
 ```
-1. **Load Destination:** Choose your background image.
-2. **Load Source:** Choose the image to clone from.
-3. **Select Region:** Draw a polygon on the source image and press **ENTER**.
-4. **Position & Scale:** Use the mouse to drag the selection on the destination. Use the **Scale Slider** to resize it.
-5. **Choose Mode:** Select from Seamless Cloning, Mixed Gradients, Texture Flattening, or Illumination Change.
-6. **Adjust Parameters:** Fine-tune edge thresholds or illumination factors.
-7. **Process:** Hit the green **PROCESS** button.
-8. **Save:** Export your masterpiece.
 
-## Features
-- **All-in-One Workspace:** No more switching between windows.
-- **Interactive Transformation:** Drag and scale your selection visually before blending.
-- **Advanced Paper Features:**
-    - **Seamless Cloning & Mixed Gradients** (Section 3).
-    - **Texture Flattening** (Section 4): Create flat, artistic looks while preserving edges.
-    - **Local Illumination Change** (Section 4): Correct exposure or highlights seamlessly.
-- **High Performance:** Hybrid solver (Direct/Iterative) with vectorized gradient calculations.
-- **No OpenCV:** Built with modern Python libraries (PySide6, NumPy, SciPy, Scikit-Image).
+### Workflow Steps
+1.  **Load Destination:** Load your primary background image.
+2.  **Selection:** 
+    *   Click **"Import External Source"** to cut an object from another image.
+    *   Click **"Select on Destination"** for local edits (Flattening, Illumination, Color).
+3.  **Draw Mask:** Click to draw a polygon. Press **ENTER** (or click the button) to confirm.
+4.  **Transform:** (External sources only) Drag the cutout to position it. Use the mouse wheel or slider to scale it.
+5.  **Edit Mode:** Choose the Poisson trasformation you want to apply and adjust the contextual parameters (Thresholds, Alpha/Beta, or RGB scales).
+6.  **Process:** Click the green **PROCESS** button. The solver uses a memory-efficient iterative CG backend for high-res images.
+7.  **Save:** Export the final result to PNG, JPG, or BMP.
 
+## Technical Details
+*   **Hybrid Solver:** Automatically switches between `spsolve` (Direct) for speed on small regions and `cg` (Iterative) for memory efficiency on large selections.
+*   **Mathematical Rigor:** Correctly implements Section 2 boundary conditions ($| N_p |$) for accurate results even when selections touch image edges.
+*   **Vectorization & Parallelism:** Core gradient and Laplacian calculations are fully vectorized. Red, Green, and Blue channels are solved in **parallel** using multi-threading to maximize CPU utilization.
+*   **No OpenCV:** Strictly adheres to project constraints by utilizing only the approved scientific computing stack.
+
+## Testing

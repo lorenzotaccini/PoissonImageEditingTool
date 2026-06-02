@@ -1,8 +1,8 @@
 import sys
 import os
 import numpy as np
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QPushButton, QFileDialog, QComboBox, 
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QHBoxLayout, QPushButton, QFileDialog, QComboBox,
                              QLabel, QSlider, QStackedWidget, QMessageBox, QGroupBox)
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QPixmap, QImage, QPainter, QColor
@@ -11,17 +11,18 @@ from skimage.draw import polygon as sk_polygon
 
 from canvas import MainCanvas, SourceSelectionCanvas
 from utils import load_image, save_image
-from solver import (poisson_edit, poisson_edit_flatten, 
+from solver import (poisson_edit, poisson_edit_flatten,
                     poisson_edit_illumination, poisson_edit_color)
 
 class PoissonApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Poisson Image Editing Pro")
+        self.setWindowTitle("CG Project - Poisson Image Editing")
         self.resize(1100, 800)
 
         self.source_img = None
         self.dest_img = None
+        self.processed_img = None
         self.mask = None
         self.last_dir = os.path.expanduser("~")
         self.is_inplace = False
@@ -37,9 +38,9 @@ class PoissonApp(QMainWindow):
         self.canvas_stack = QStackedWidget()
         self.main_canvas = MainCanvas()
         self.selection_canvas = SourceSelectionCanvas()
-        
+
         self.canvas_stack.addWidget(self.main_canvas)
-        
+
         selection_container = QWidget()
         selection_layout = QVBoxLayout(selection_container)
         selection_layout.setContentsMargins(0,0,0,0)
@@ -49,7 +50,7 @@ class PoissonApp(QMainWindow):
         self.btn_confirm_selection.clicked.connect(lambda: self.selection_canvas.selectionFinished.emit(self.selection_canvas.points))
         selection_layout.addWidget(self.btn_confirm_selection)
         self.canvas_stack.addWidget(selection_container)
-        
+
         layout.addWidget(self.canvas_stack, 4)
 
         # Right Side: Control Panel
@@ -78,9 +79,9 @@ class PoissonApp(QMainWindow):
         mode_layout = QVBoxLayout(mode_group)
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([
-            "Seamless Cloning", 
-            "Mixed Gradients", 
-            "Texture Flattening", 
+            "Seamless Cloning",
+            "Mixed Gradients",
+            "Texture Flattening",
             "Illumination Change",
             "Color Change (Tinting)"
         ])
@@ -91,7 +92,7 @@ class PoissonApp(QMainWindow):
         # 3. Parameters Group
         self.param_group = QGroupBox("3. Mode Parameters")
         self.param_layout = QVBoxLayout(self.param_group)
-        
+
         # Flattening
         self.label_thresh = QLabel("Edge Threshold: 0.10")
         self.slider_thresh = QSlider(Qt.Orientation.Horizontal)
@@ -138,17 +139,31 @@ class PoissonApp(QMainWindow):
         self.slider_b.setRange(0, 200); self.slider_b.setValue(100)
         self.slider_b.valueChanged.connect(lambda v: self.label_b.setText(f"Blue Scale: {v/100:.1f}x"))
         color_layout.addWidget(self.label_b); color_layout.addWidget(self.slider_b)
-        
+
         self.param_layout.addWidget(self.color_ctrls)
         controls.addWidget(self.param_group)
         self.update_param_visibility()
+
+        # View Group
+        view_group = QGroupBox("View Controls")
+        view_layout = QHBoxLayout(view_group)
+        btn_zoom_in = QPushButton("+ Zoom")
+        btn_zoom_in.clicked.connect(lambda: self.current_canvas().zoom_view(1.2))
+        btn_zoom_out = QPushButton("- Zoom")
+        btn_zoom_out.clicked.connect(lambda: self.current_canvas().zoom_view(0.8))
+        btn_zoom_reset = QPushButton("Reset")
+        btn_zoom_reset.clicked.connect(lambda: self.current_canvas().reset_zoom())
+        view_layout.addWidget(btn_zoom_in)
+        view_layout.addWidget(btn_zoom_out)
+        view_layout.addWidget(btn_zoom_reset)
+        controls.addWidget(view_group)
 
         # 4. Transform Group
         self.trans_group = QGroupBox("4. Position & Scale")
         trans_layout = QVBoxLayout(self.trans_group)
         self.label_scale = QLabel("Scale: 1.0x")
         self.slider_scale = QSlider(Qt.Orientation.Horizontal)
-        self.slider_scale.setRange(10, 300) 
+        self.slider_scale.setRange(10, 300)
         self.slider_scale.setValue(100)
         self.slider_scale.valueChanged.connect(self.on_scale_changed)
         trans_layout.addWidget(self.label_scale)
@@ -178,6 +193,13 @@ class PoissonApp(QMainWindow):
         self.selection_canvas.selectionFinished.connect(self.on_selection_finished)
         self.main_canvas.scaleChanged.connect(self.on_canvas_scale_changed)
         self.processed_img = None
+
+    def current_canvas(self):
+        # Index 0 is main_canvas, Index 1 is the container for selection_canvas
+        if self.canvas_stack.currentIndex() == 0:
+            return self.main_canvas
+        else:
+            return self.selection_canvas
 
     def update_param_visibility(self):
         mode = self.mode_combo.currentText()
@@ -211,7 +233,7 @@ class PoissonApp(QMainWindow):
             self.source_img = load_image(path)
             self.is_inplace = False
             self.selection_canvas.set_image(self.source_img)
-            self.canvas_stack.setCurrentIndex(1) 
+            self.canvas_stack.setCurrentIndex(1)
             self.panel_widget.setEnabled(False)
             self.status_label.setText("Draw a mask on the source and confirm.")
 
@@ -238,13 +260,13 @@ class PoissonApp(QMainWindow):
         self.mask[rr, cc] = 255
 
         cutout = self.source_img.copy()
-        qimg = QImage(w, h, QImage.Format_ARGB32)
+        qimg = QImage(w, h, QImage.Format.Format_ARGB32)
         qimg.fill(Qt.GlobalColor.transparent)
         for i in range(len(rr)):
             y, x = rr[i], cc[i]
             r, g, b = cutout[y, x]
             qimg.setPixelColor(x, y, QColor(r, g, b, 255))
-        
+
         self.main_canvas.add_layer(QPixmap.fromImage(qimg))
         if self.is_inplace:
             self.main_canvas.layer.setPos(0, 0)
@@ -268,7 +290,7 @@ class PoissonApp(QMainWindow):
 
     def process_image(self):
         if not self.main_canvas.layer: return
-        
+
         self.panel_widget.setEnabled(False)
         self.main_canvas.setEnabled(False)
         self.status_label.setText("Solving Poisson equations...")
@@ -277,7 +299,7 @@ class PoissonApp(QMainWindow):
         x, y, scale = self.main_canvas.get_layer_transform()
         h_s, w_s = self.source_img.shape[:2]
         new_w, new_h = int(w_s * scale), int(h_s * scale)
-        
+
         if new_w <= 0 or new_h <= 0:
             self.panel_widget.setEnabled(True); self.main_canvas.setEnabled(True)
             return
@@ -287,6 +309,7 @@ class PoissonApp(QMainWindow):
 
         mode = self.mode_combo.currentText()
         try:
+            res = None
             if mode == "Seamless Cloning":
                 res = poisson_edit(src_scaled, self.dest_img, mask_scaled, offset=(int(y), int(x)), mix_gradients=False)
             elif mode == "Mixed Gradients":
@@ -301,15 +324,15 @@ class PoissonApp(QMainWindow):
             elif mode == "Color Change (Tinting)":
                 r_s, g_s, b_s = self.slider_r.value()/100.0, self.slider_g.value()/100.0, self.slider_b.value()/100.0
                 res = poisson_edit_color(src_scaled, self.dest_img, mask_scaled, offset=(int(y), int(x)), red_scale=r_s, green_scale=g_s, blue_scale=b_s)
-            
+
             self.processed_img = res
             self.dest_img = self.processed_img.copy()
             self.main_canvas.set_background(self.dest_img)
-            
+
             if self.main_canvas.layer:
                 self.main_canvas.scene.removeItem(self.main_canvas.layer)
                 self.main_canvas.layer = None
-                
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Processing failed: {str(e)}")
         finally:
@@ -323,7 +346,7 @@ class PoissonApp(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save Result", self.last_dir, "Images (*.png *.jpg *.jpeg)")
         if path:
             self.last_dir = os.path.dirname(path); save_image(self.processed_img, path)
-            QMessageBox.showinfo("Success", "Saved successfully!")
+            QMessageBox.warning(self, "Success", "Saved successfully!")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

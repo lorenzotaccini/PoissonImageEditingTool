@@ -1,0 +1,115 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{margin=1in}
+
+\begin{document}
+
+% --- Title Page ---
+\begin{titlepage}
+    \centering
+    {\large \textbf{Università di Modena e Reggio Emilia}} \\
+    {\large Dipartimento di Fisica, Matematica e Informatica} \\
+    \vspace{2cm}
+    {\Large \textit{Computer Graphics Project}} \\
+    \vspace{1.5cm}
+    \rule{\linewidth}{0.5mm} \\[0.4cm]
+    {\huge \textbf{Poisson Image Editing Pro: \\ A Gradient-Domain Manipulation Tool}} \\[0.4cm]
+    \rule{\linewidth}{0.5mm} \\
+    \vspace{3cm}
+    
+    \begin{flushright}
+        \large
+        \textbf{Author:} \\
+        [Your Name Here] \\
+        \vspace{1cm}
+        \textbf{Academic Year 2025-2026}
+    \end{flushright}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% --- Chapter 1: Introduction & Implementation ---
+\chapter{Poisson Image Editing}
+
+The project described in this report aims to implement a comprehensive and interactive tool for gradient-domain image editing, based on the seminal framework introduced by Pérez et al. (2003).
+
+\section{Background and Context}
+The reference method is that proposed in \textit{"Poisson Image Editing"} (Pérez et al., 2003), which shifts the paradigm of image manipulation from the pixel (intensity) domain to the gradient (variation) domain. 
+
+The core idea is that the human eye is more sensitive to gradients (changes in intensity) than to absolute color values. By solving a Poisson equation with Dirichlet boundary conditions, we can "reconstruct" a source region into a destination image such that the boundaries match perfectly, ensuring a seamless blend regardless of lighting or color differences between the two images.
+
+For more complex scenarios, the project also incorporates:
+\begin{itemize}
+    \item \textbf{Mixed Gradients:} Combining source and destination variations to preserve background textures (e.g., skin details under a tattoo).
+    \item \textbf{Section 4 Applications:} Advanced local modifications including texture flattening, illumination correction, and selective color tinting.
+\end{itemize}
+
+\section{Project Implementation}
+The theoretical principles were translated into a practical software project written in Python, adhering to the constraint of not using the OpenCV library. The implementation involved the following core activities:
+
+\begin{itemize}
+    \item \textbf{Discrete Poisson Solver:} I implemented a vectorized solver using \texttt{NumPy} and \texttt{SciPy}. The tool builds a sparse Laplacian matrix $A$ over the mask region. To ensure scalability, I used a hybrid approach: a direct solver (\texttt{spsolve}) for regions under 100,000 pixels and an iterative Conjugate Gradient (\texttt{cg}) solver for larger selections to prevent memory exhaustion.
+    
+    \item \textbf{Advanced Editing Modes:}
+    \begin{itemize}
+        \item \textit{Texture Flattening:} Implemented using a sparse edge sieve via the Sobel operator to keep only high-magnitude gradients.
+        \item \textit{Local Illumination:} Implemented dynamic range compression of gradients to reduce specular highlights or bring out shadow details.
+        \item \textit{Color Change:} Developed an independent RGB gradient scaling mode to "tint" objects while preserving shading and volume.
+    \end{itemize}
+
+    \item \textbf{Professional Interactive UI:} Using \texttt{PySide6}, I developed an all-in-one workspace. Features include:
+    \begin{itemize}
+        \item Interactive polygon selection.
+        \item Real-time positioning and scaling of the selection layer via mouse-drag and wheel-scroll.
+        \item Context-aware parameter sliders for different editing modes.
+        \item Viewport zoom controls for detailed mask drawing.
+    \end{itemize}
+    
+    \item \textbf{Technical Optimization:} All core math is vectorized to minimize Python loop overhead. Boundary conditions $|N_p|$ are correctly calculated per pixel to handle selections touching image edges accurately.
+\end{itemize}
+
+\chapter{Results}
+
+\section{Experimental Evaluation}
+The results obtained with the tool are highly satisfactory. Below are placeholders for the experimental results obtained during testing.
+
+% Placeholder for First Result (Cloning)
+\begin{figure}[H]
+    \centering
+    % \includegraphics[width=0.3\linewidth]{source_1}
+    % \includegraphics[width=0.3\linewidth]{dest_1}
+    % \includegraphics[width=0.3\linewidth]{result_1}
+    \vspace{4cm} % Manual space
+    \caption{Seamless Cloning: Source region, Destination background, and final Poisson blend.}
+\end{figure}
+
+\section{Case Study: Reflection Reduction}
+One of the most challenging tasks is the reduction of specular highlights. Using the \textit{Illumination Change} mode, the tool successfully dampens harsh reflections on surfaces like fruit skin by compressing large gradients while preserving the subtle underlying textures.
+
+% Placeholder for Reflection Result
+\begin{figure}[H]
+    \centering
+    % \includegraphics[width=0.45\linewidth]{fruit_original}
+    % \includegraphics[width=0.45\linewidth]{fruit_corrected}
+    \vspace{5cm} % Manual space
+    \caption{Specular Highlight Reduction: Comparison between the original image and the corrected result ($\alpha=0.12, \beta=0.30$).}
+\end{figure}
+
+\chapter{Conclusions}
+In general, the gradient-domain approach proved extremely effective for both seamless object insertion and local surface editing. The use of the Poisson equation allows for a level of blending that is virtually impossible to achieve with standard pixel-based "feathering" or "alpha-blending."
+
+The implementation of the professional UI significantly lowers the barrier to entry for using these mathematical techniques, providing a workflow that feels natural and responsive. Future improvements could involve GPU-accelerated solvers (e.g., via \texttt{PyTorch} or \texttt{CuPy}) to handle ultra-high-resolution images in real-time, although the current iterative CPU solver provides a robust and portable baseline.
+
+\end{document}
