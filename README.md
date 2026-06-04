@@ -1,16 +1,16 @@
-# Poisson Image Editing Pro
+# Poisson Image Editing Tool
 
 A desktop application for gradient-domain image editing, based on the research paper **"Poisson Image Editing"** (Pérez et al., SIGGRAPH 2003).
 
-This tool provides an interface for seamless cloning and local image modifications without the need for OpenCV, utilizing optimized mathematical solvers for high-quality results.
+This tool provides an interface for seamless cloning and local image modifications, utilizing optimized mathematical solvers for high-quality results.
 
 ## Key Features
 
-### 1. Seamless Cloning (Section 3)
+### 1. Seamless Cloning
 *   **Seamless Cloning:** Paste objects from one image to another with perfect color and lighting integration.
 *   **Mixed Gradients:** Combine source and destination textures. Ideal for transparent objects or preserving background patterns (e.g., skin pores, fabric).
 
-### 2. Selection Editing (Section 4)
+### 2. Selection Editing
 *   **Texture Flattening:** "Iron out" internal textures while keeping sharp outlines. Perfect for artistic effects or smoothing surfaces.
 *   **Local Illumination Change:** Correct exposure, bring out shadow details, or compress specular highlights (glare) seamlessly.
 *   **Color Change (Tinting):** Redefined as independent RGB gradient scaling. Change the color of objects while preserving all original shading, highlights, and 3D volume.
