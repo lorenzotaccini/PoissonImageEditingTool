@@ -55,6 +55,6 @@ python src/main.py
 *   **Hybrid Solver:** Automatically switches between `spsolve` (Direct) for speed on small regions and `cg` (Iterative) for memory efficiency on large selections.
 *   **Mathematical Rigor:** Correctly implements Section 2 boundary conditions ($| N_p |$) for accurate results even when selections touch image edges.
 *   **Vectorization & Parallelism:** Core gradient and Laplacian calculations are fully vectorized. Red, Green, and Blue channels are solved in **parallel** using multi-threading to maximize CPU utilization.
-*   **No OpenCV:** Strictly adheres to project constraints by utilizing only the approved scientific computing stack.
+
 
 
