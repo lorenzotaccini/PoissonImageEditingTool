@@ -59,7 +59,7 @@ class PoissonApp(QMainWindow):
         layout.addWidget(self.panel_widget, 1)
 
         # 1. File Group
-        file_group = QGroupBox("1. Load & Select")
+        file_group = QGroupBox("1. Load/Select")
         file_layout = QVBoxLayout(file_group)
         btn_load_dest = QPushButton("Load Image (Destination)")
         btn_load_dest.clicked.connect(self.load_destination)

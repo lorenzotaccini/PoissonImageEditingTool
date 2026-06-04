@@ -57,4 +57,4 @@ python src/main.py
 *   **Vectorization & Parallelism:** Core gradient and Laplacian calculations are fully vectorized. Red, Green, and Blue channels are solved in **parallel** using multi-threading to maximize CPU utilization.
 *   **No OpenCV:** Strictly adheres to project constraints by utilizing only the approved scientific computing stack.
 
-## Testing
+
