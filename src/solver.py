@@ -45,7 +45,7 @@ def poisson_edit_flatten(source, destination, mask, offset=(0, 0),
 
 
 def poisson_edit_illumination(source, destination, mask, offset=(0, 0),
-                               alpha_factor=0.2, beta=0.2):
+                              alpha_factor=0.2, beta=0.2):
     """
     Section 4 — Local illumination change (eq. 16).
 
@@ -57,8 +57,21 @@ def poisson_edit_illumination(source, destination, mask, offset=(0, 0),
     alpha_factor : float  fraction of mean gradient norm used as alpha (paper: 0.2)
     beta         : float  compression exponent (paper: 0.2)
     """
-    guidance = _build_illumination_guidance(source, mask, alpha_factor, beta)
-    return _solve(source, destination, mask, offset, guidance)
+    # 1. Convert source and destination to the log domain
+    # We add 1.0 to avoid log(0) issues with pure black pixels
+    source_log = np.log(source.astype(np.float64) + 1.0)
+    dest_log = np.log(destination.astype(np.float64) + 1.0)
+
+    # 2. Build guidance using the log-domain images
+    guidance = _build_illumination_guidance(source_log, mask, alpha_factor, beta)
+
+    # 3. Solve in the log domain (using our new return_float flag!)
+    result_log = _solve(source_log, dest_log, mask, offset, guidance, return_float=True)
+
+    # 4. Exponentiate back to linear color space
+    result_linear = np.exp(result_log) - 1.0
+
+    return np.clip(result_linear, 0, 255).astype(np.uint8)
 
 
 def poisson_edit_color(source, destination, mask, offset=(0, 0),
@@ -290,11 +303,16 @@ def _build_illumination_guidance(source, mask, alpha_factor, beta):
         s_c = source[:, :, c].astype(np.float64)
         gx = sobel(s_c, axis=1)
         gy = sobel(s_c, axis=0)
-        mag = np.sqrt(gx**2 + gy**2)
+        mag = np.sqrt(gx ** 2 + gy ** 2)
+
         # Avoid division by zero
         eps = 1e-6
+
+        # Alpha is alpha_factor * average gradient norm over the selection
         alpha = alpha_factor * (mag[y_idx, x_idx].mean() + eps)
-        scale = alpha * beta * (mag + eps) ** (-beta)   # spatially-varying
+
+        # Apply the correct paper formula: scale = (alpha^beta) * |gradient|^-beta
+        scale = (alpha ** beta) * (mag + eps) ** (-beta)
 
         vpq_grid = {}
         for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
@@ -304,10 +322,12 @@ def _build_illumination_guidance(source, mask, alpha_factor, beta):
             ny_s_c = np.clip(ny_s, 0, h_s - 1)
             nx_s_c = np.clip(nx_s, 0, w_s - 1)
 
+            # ∇f* (gradient of the original image)
             raw_vpq = in_src.astype(np.float64) * (
-                s_c[y_idx, x_idx] - s_c[ny_s_c, nx_s_c]
+                    s_c[y_idx, x_idx] - s_c[ny_s_c, nx_s_c]
             )
-            # Scale by the alpha-beta factor at pixel p
+
+            # Apply the compression scale locally
             vpq_grid[(dy, dx)] = scale[y_idx, x_idx] * raw_vpq
 
         return vpq_grid
@@ -351,7 +371,7 @@ def _solve_channel(c, A, source, destination, mask, offset, guidance_fn,
     return c, x_sol
 
 
-def _solve(source, destination, mask, offset, guidance_fn):
+def _solve(source, destination, mask, offset, guidance_fn, return_float=False):
     """
     Core solve: build A once, then solve R, G, B channels in parallel.
     """
@@ -380,4 +400,7 @@ def _solve(source, destination, mask, offset, guidance_fn):
             c, x_sol = future.result()
             result[y_d, x_d, c] = x_sol
 
-    return np.clip(result, 0, 255).astype(np.uint8)
+            # Update the return statement
+        if return_float:
+            return result
+        return np.clip(result, 0, 255).astype(np.uint8)
