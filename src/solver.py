@@ -293,28 +293,37 @@ def _build_flatten_guidance(source, mask, edge_threshold):
 def _build_illumination_guidance(source, mask, alpha_factor, beta):
     """
     Section 4, eq. 16 — Local illumination change.
-
-    Applies v = alpha * beta * |∇f*|^(-beta) * ∇f* to compress large
-    gradients and boost small ones, correcting local exposure.
     """
     h_s, w_s = source.shape[:2]
 
+    # 1. Compute Luminance (Grayscale)
+    # This ensures R, G, and B gradients are scaled by the exact same multiplier,
+    # preserving the original color ratios and preventing psychedelic color noise.
+    luminance = (0.299 * source[:, :, 0] +
+                 0.587 * source[:, :, 1] +
+                 0.114 * source[:, :, 2])
+
+    # 2. Use pure mathematical gradients instead of Sobel.
+    # Sobel applies a 3x3 smoothing kernel which artificially inflates magnitude.
+    gy, gx = np.gradient(luminance)
+    mag = np.sqrt(gx ** 2 + gy ** 2)
+
+    # 3. Calculate mean magnitude only inside the mask
+    eps = 1e-6
+    m = (mask > 128)
+    mean_mag = mag[m].mean() if m.any() else 0.0
+
+    # 4. Calculate the universal scale map based on the paper's formula
+    alpha = alpha_factor * (mean_mag + eps)
+    scale_map = (alpha / (mag + eps)) ** beta
+
+    # 5. Cap maximum amplification to prevent blowing up noise in flat regions
+    scale_map = np.clip(scale_map, 0.0, 10.0)
+
     def guidance(c, y_idx, x_idx, y_d, x_d, mask_ids):
         s_c = source[:, :, c].astype(np.float64)
-        gx = sobel(s_c, axis=1)
-        gy = sobel(s_c, axis=0)
-        mag = np.sqrt(gx ** 2 + gy ** 2)
-
-        # Avoid division by zero
-        eps = 1e-6
-
-        # Alpha is alpha_factor * average gradient norm over the selection
-        alpha = alpha_factor * (mag[y_idx, x_idx].mean() + eps)
-
-        # Apply the correct paper formula: scale = (alpha^beta) * |gradient|^-beta
-        scale = (alpha ** beta) * (mag + eps) ** (-beta)
-
         vpq_grid = {}
+
         for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             ny_s = y_idx + dy
             nx_s = x_idx + dx
@@ -322,18 +331,16 @@ def _build_illumination_guidance(source, mask, alpha_factor, beta):
             ny_s_c = np.clip(ny_s, 0, h_s - 1)
             nx_s_c = np.clip(nx_s, 0, w_s - 1)
 
-            # ∇f* (gradient of the original image)
             raw_vpq = in_src.astype(np.float64) * (
                     s_c[y_idx, x_idx] - s_c[ny_s_c, nx_s_c]
             )
 
-            # Apply the compression scale locally
-            vpq_grid[(dy, dx)] = scale[y_idx, x_idx] * raw_vpq
+            # Multiply the raw channel gradient by the uniform luminance scale
+            vpq_grid[(dy, dx)] = scale_map[y_idx, x_idx] * raw_vpq
 
         return vpq_grid
 
     return guidance
-
 
 from concurrent.futures import ThreadPoolExecutor
 
